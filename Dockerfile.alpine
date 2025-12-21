@@ -2,7 +2,7 @@
 
 # Alpine-based Munin master that generates static HTML/graphs via munin-cron
 
-FROM alpine:3.20
+FROM alpine:3
 
 # Runtime deps:
 #  - munin        : master scripts (munin-cron, munin-{update,graph,html}, etc.)

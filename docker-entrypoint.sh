@@ -19,6 +19,7 @@ set -e
 export MUNIN_DB_DIR MUNIN_HTML_DIR MUNIN_LOG_DIR MUNIN_RUN_DIR MUNIN_TPL_DIR
 export MUNIN_HOSTNAME MUNIN_NODE_ADDRESS
 
+
 # Generate /etc/munin/munin.conf from template unless user bind-mounts their own
 if [ ! -f /etc/munin/munin.conf ]; then
     echo "munin-master: generating /etc/munin/munin.conf from template"
@@ -28,21 +29,6 @@ if [ ! -f /etc/munin/munin.conf ]; then
     sed 's/^/    /' /etc/munin/munin.conf
     echo "---"    
 fi
-
-# Ensure directories exist and are owned by 'munin'
-mkdir -p "$MUNIN_DB_DIR" "$MUNIN_HTML_DIR" "$MUNIN_LOG_DIR" "$MUNIN_RUN_DIR"
-chown -R munin:munin "$MUNIN_DB_DIR" "$MUNIN_HTML_DIR" "$MUNIN_LOG_DIR" "$MUNIN_RUN_DIR"
-
-MUNIN_NODE_ADDRESS="${MUNIN_NODE_ADDRESS:-munin-node}"
-echo "munin-master: connectivity check to munin-node..."
-if nc -z -w 3 "$MUNIN_NODE_ADDRESS" 4949 >/dev/null 2>&1; then
-    echo "  [OK]  TCP $MUNIN_NODE_ADDRESS:4949"
-else
-    echo "  [WARN] Cannot reach $MUNIN_NODE_ADDRESS:4949 (will retry via cron)"
-fi
-
-#!/bin/sh
-set -e
 
 # --- Map munin UID/GID to host user specified by MUNIN_HOST_USER (e.g. nsadmin) ---
 
@@ -72,6 +58,29 @@ if [ -n "$MUNIN_HOST_USER" ] && [ -f /host-etc/passwd ]; then
     else
         echo "munin-master: MUNIN_HOST_USER '$MUNIN_HOST_USER' not found in /host-etc/passwd" >&2
     fi
+fi
+
+# Ensure directories exist and are owned by 'munin'
+mkdir -p "$MUNIN_DB_DIR" "$MUNIN_HTML_DIR" "$MUNIN_LOG_DIR" "$MUNIN_RUN_DIR"
+
+echo "munin-master: pre-map chown test: $(id)"
+echo "munin-master: fstype html: $(stat -f -c %T "$MUNIN_HTML_DIR" 2>/dev/null || echo unknown)"
+
+chown -R munin:munin "$MUNIN_DB_DIR" "$MUNIN_LOG_DIR" "$MUNIN_RUN_DIR" || true
+
+fstype="$(stat -f -c %T "$MUNIN_HTML_DIR" 2>/dev/null || true)"
+if [ "$fstype" != "nfs" ] && [ "$fstype" != "nfs4" ]; then
+  chown -R munin:munin "$MUNIN_HTML_DIR" 2>/dev/null || true
+else
+  echo "munin-master: $MUNIN_HTML_DIR is $fstype; skipping chown"
+fi
+
+MUNIN_NODE_ADDRESS="${MUNIN_NODE_ADDRESS:-munin-node}"
+echo "munin-master: connectivity check to munin-node..."
+if nc -z -w 3 "$MUNIN_NODE_ADDRESS" 4949 >/dev/null 2>&1; then
+    echo "  [OK]  TCP $MUNIN_NODE_ADDRESS:4949"
+else
+    echo "  [WARN] Cannot reach $MUNIN_NODE_ADDRESS:4949 (will retry via cron)"
 fi
 
 mkdir -p /var/cache/fontconfig
